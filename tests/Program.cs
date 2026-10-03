@@ -44,6 +44,23 @@ if (args.Contains("--dns-read"))
     Console.WriteLine("Read-only adapter/DNS/HTTPS check; no netsh mutation, hosts edit or driver loading.");
     return;
 }
+if (args.Contains("--community-read"))
+{
+    var ips = await FixEngine.Resolve("steamcommunity.com");
+    foreach (var uri in FixEngine.WebChecks)
+    {
+        var windows = await FixEngine.ProbeDetailed(uri);
+        Console.WriteLine($"Windows {uri}: {windows.Success} — {windows.Detail}");
+        if (uri.Host != "steamcommunity.com") continue;
+        foreach (string ip in ips)
+        {
+            var direct = await FixEngine.ProbeDetailed(uri, ip);
+            Console.WriteLine($"DoH IPv4 {ip} {uri.AbsolutePath}: {direct.Success} — {direct.Detail}");
+        }
+    }
+    Console.WriteLine("Read-only check; no DNS/hosts changes or DPI driver loading. /my/ checks anonymous login routing only.");
+    return;
+}
 int count = 0;
 void Assert(bool condition, string name)
 {
@@ -56,6 +73,32 @@ void Reject(Action action, string name)
     catch (IOException) { Assert(true, name); return; }
     throw new Exception("FAIL: " + name);
 }
+async Task<(FixEngine.WebProbe Result, int Requests)> WebScenario(params (int Status, string? Location)[] replies)
+{
+    using var handler = new ScriptedWebHandler(replies);
+    using var client = new HttpClient(handler);
+    var result = await FixEngine.ProbeWithClient(client, new Uri("https://steamcommunity.com/my/"));
+    return (result, handler.Requests.Count);
+}
+var unavailableProfile = await WebScenario((302, "/login/home/?goto=/my/"), (503, null));
+Assert(!unavailableProfile.Result.Success && unavailableProfile.Requests == 2,
+    "Profile redirect to an unavailable login page cannot report success");
+var availableProfile = await WebScenario((302, "/login/home/?goto=/my/"), (200, null));
+Assert(availableProfile.Result.Success && availableProfile.Requests == 2,
+    "Anonymous profile check follows Steam login redirect to a successful final response");
+var externalRedirect = await WebScenario((302, "https://example.com/blocked"));
+Assert(!externalRedirect.Result.Success && externalRedirect.Requests == 1,
+    "A redirect outside Steam fails without contacting the external site");
+var insecureRedirect = await WebScenario((302, "http://steamcommunity.com/login/"));
+Assert(!insecureRedirect.Result.Success && insecureRedirect.Requests == 1,
+    "HTTPS downgrade is rejected without sending a plaintext request");
+Assert(!(await WebScenario((302, null))).Result.Success, "Redirect without Location fails");
+Assert(!(await WebScenario((304, null))).Result.Success, "HTTP 304 does not prove a usable web page");
+Assert(!(await WebScenario((403, null))).Result.Success, "Community HTTP 403 is a failure, unlike a CDN root");
+var redirectLoop = await WebScenario(Enumerable.Repeat((302, (string?)"/my/"), 6).ToArray());
+Assert(!redirectLoop.Result.Success && redirectLoop.Requests == 6, "Redirect loops stop after a bounded number of requests");
+var storeLoginRedirect = await WebScenario((302, "https://login.steampowered.com/"), (200, null));
+Assert(storeLoginRedirect.Result.Success, "Cross-host HTTPS redirect inside the Steam allowlist is supported");
 var addresses = new Dictionary<string, string> { ["store.steampowered.com"] = "23.10.20.30" };
 foreach (string original in new[] { "", "# original", "# original\r\n", "# original\n127.0.0.1 localhost\n", "# café\r\n" })
 {
@@ -140,3 +183,16 @@ using (var parent = Process.Start(HelperInfo("--parent-crash"))!)
     Assert(childMonitor.WaitForExit(5000), "UI crash cannot leave engine helper running");
 }
 Console.WriteLine($"{count} checks passed; system hosts untouched.");
+
+sealed class ScriptedWebHandler((int Status, string? Location)[] replies) : System.Net.Http.HttpMessageHandler
+{
+    public List<Uri> Requests { get; } = [];
+    protected override Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var reply = replies[Requests.Count];
+        Requests.Add(request.RequestUri!);
+        var response = new System.Net.Http.HttpResponseMessage((System.Net.HttpStatusCode)reply.Status);
+        if (reply.Location != null) response.Headers.Location = new Uri(reply.Location, UriKind.RelativeOrAbsolute);
+        return Task.FromResult(response);
+    }
+}

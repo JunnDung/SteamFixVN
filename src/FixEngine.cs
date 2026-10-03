@@ -10,6 +10,14 @@ namespace SteamFixVN;
 public static class FixEngine
 {
     public static readonly string[] Domains = ["store.steampowered.com", "steamcommunity.com", "help.steampowered.com", "login.steampowered.com", "checkout.steampowered.com", "store.akamai.steamstatic.com", "community.akamai.steamstatic.com", "shared.akamai.steamstatic.com", "avatars.akamai.steamstatic.com"];
+    public static readonly Uri[] WebChecks = [
+        new("https://store.steampowered.com/"),
+        new("https://steamcommunity.com/"),
+        new("https://steamcommunity.com/discussions/"),
+        new("https://steamcommunity.com/my/"),
+        new("https://help.steampowered.com/")
+    ];
+    public sealed record WebProbe(bool Success, string Detail);
     public const string Begin = "\r\n# BEGIN SteamFixVN v1\r\n";
     public const string End = "# END SteamFixVN v1\r\n";
     public static string HostsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "drivers", "etc", "hosts");
@@ -59,6 +67,7 @@ public static class FixEngine
 
     public static async Task<List<string>> Resolve(string domain)
     {
+        var candidates = new List<string>();
         foreach (string endpoint in new[] { "https://1.1.1.1/dns-query", "https://dns.google/resolve" })
         {
             try
@@ -73,15 +82,26 @@ public static class FixEngine
                 var ips = answer.EnumerateArray().Where(a => a.GetProperty("type").GetInt32() == 1)
                     .Select(a => a.GetProperty("data").GetString()!)
                     .Where(s => IPAddress.TryParse(s, out var ip) && IsPublicV4(ip)).Distinct().Take(3).ToList();
-                if (ips.Count > 0) return ips;
+                foreach (string ip in ips)
+                    if (!candidates.Contains(ip)) candidates.Add(ip);
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) { }
         }
+        if (candidates.Count > 0) return candidates;
         throw new IOException($"Không lấy được DNS mã hóa cho {domain}. Kiểm tra Internet hoặc thử mạng khác.");
     }
 
     // Connect to the resolved IP, keeping the real hostname for TLS/SNI validation.
     public static async Task<bool> Probe(string domain, string? address = null, bool cdnRoot = false)
+    {
+        var checks = WebChecks.Where(uri => uri.Host == domain).ToArray();
+        if (checks.Length == 0) checks = [new Uri($"https://{domain}/")];
+        foreach (var uri in checks)
+            if (!(await ProbeDetailed(uri, address, cdnRoot)).Success) return false;
+        return true;
+    }
+
+    public static async Task<WebProbe> ProbeDetailed(Uri uri, string? address = null, bool cdnRoot = false)
     {
         using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
         if (address != null)
@@ -90,20 +110,48 @@ public static class FixEngine
                 var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                 try
                 {
-                    await socket.ConnectAsync(IPAddress.Parse(address), context.DnsEndPoint.Port, token);
+                    // A redirect to another Steam hostname must use that hostname's own DNS/IP.
+                    if (context.DnsEndPoint.Host.Equals(uri.Host, StringComparison.OrdinalIgnoreCase))
+                        await socket.ConnectAsync(IPAddress.Parse(address), context.DnsEndPoint.Port, token);
+                    else
+                        await socket.ConnectAsync(context.DnsEndPoint, token);
                     return new NetworkStream(socket, ownsSocket: true);
                 }
                 catch { socket.Dispose(); throw; }
             };
-        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(6) };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(8) };
+        return await ProbeWithClient(client, uri, cdnRoot);
+    }
+
+    public static async Task<WebProbe> ProbeWithClient(HttpClient client, Uri uri, bool cdnRoot = false)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(12));
         try
         {
-            using var response = await client.GetAsync($"https://{domain}/", HttpCompletionOption.ResponseHeadersRead);
-            int status = (int)response.StatusCode;
-            // CDN roots normally return 403/404; a validated TLS response still proves connectivity.
-            return (status >= 200 && status < 400) || (cdnRoot && status is 403 or 404);
+            for (int redirects = 0; redirects <= 5; redirects++)
+            {
+                using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+                int status = (int)response.StatusCode;
+                if (status is 301 or 302 or 303 or 307 or 308)
+                {
+                    var location = response.Headers.Location;
+                    if (location == null) return new(false, $"HTTP {status}: thiếu địa chỉ chuyển hướng");
+                    var next = new Uri(uri, location);
+                    if (next.Scheme != Uri.UriSchemeHttps || !next.IsDefaultPort || next.UserInfo.Length != 0 || !Domains.Contains(next.Host))
+                        return new(false, $"HTTP {status}: chuyển hướng ngoài HTTPS Steam");
+                    uri = next;
+                    continue;
+                }
+                // CDN roots can return 403/404; web pages must finish with a successful status.
+                bool ok = status is >= 200 and < 300 || (cdnRoot && status is 403 or 404);
+                return new(ok, $"HTTP {status} — {uri.Host}{uri.AbsolutePath}");
+            }
+            return new(false, "Chuyển hướng quá 5 lần");
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { return false; }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or UriFormatException)
+        {
+            return new(false, e is TaskCanceledException ? "Hết thời gian kết nối" : e.GetBaseException().Message);
+        }
     }
 
     public static async Task<Dictionary<string, string>> Prepare(Action<string> log, bool requireConnectivity = true)

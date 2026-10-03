@@ -1,8 +1,18 @@
-# Steam Fix VN 1.2 — DNS IPv4 + DoH/hosts + GoodbyeDPI
+# Steam Fix VN 1.2.1 — DNS IPv4 + DoH/hosts + GoodbyeDPI
 
-Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.2.zip`.
+Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.2.1.zip`.
 
-**[Tải bản v1.2 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.2)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
+**[Tải bản v1.2.1 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.2.1)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
+
+## Store vào được nhưng Community/Profile lỗi trên FPT
+
+Mã -105 là không phân giải được tên miền; -101 là kết nối bị reset, theo [Chromium](https://chromium.googlesource.com/chromium/src/+/main/net/base/net_error_list.h). Các mã này không chứng minh nguyên nhân reset hoặc một kiểu chặn cố định.
+
+Bản 1.2.1 thử cả trang gốc Community, `/discussions/` và `/my/`; theo tối đa 5 chuyển hướng HTTPS trong danh sách hostname Steam tới phản hồi thành công. Không coi HTTP 302, 304 hoặc trang lỗi 403/503 là Community hoạt động. Khi chọn IP cho hosts, cùng các phép thử này phải đạt; truy vấn cả Cloudflare và Google DoH để có thêm IP ứng viên. `/my/` chưa đăng nhập chỉ kiểm tra đường tới trang đăng nhập, không xác nhận profile riêng tư.
+
+Trên máy FPT gặp lỗi: lưu game, đóng bản tool cũ, chạy bản mới, chọn Google hoặc Cloudflare, bật tùy chọn GoodbyeDPI và bấm **Apply**. Sau đó thử Community và Profile trong Steam lẫn trình duyệt. Giữ tool mở nếu nhật ký báo DPI đang bật. Nếu chưa được, bấm **Kiểm tra** và gửi các dòng `steamcommunity.com` cùng lỗi DPI. Nếu tool báo thành công nhưng Steam vẫn lỗi, thoát hẳn Steam và mở lại. Không cần xóa game hoặc đổi vùng tài khoản.
+
+Kiểm tra ngày 04/10/2026: 60 kiểm tra tự động đạt, gồm hồi quy chuyển hướng Profile sang trang lỗi và vòng lặp chuyển hướng. Các URL thử đã đạt trên kết nối máy phát triển qua Windows và IP DoH. **Chưa kiểm chứng Apply/DPI trên kết nối FPT của người báo lỗi; không bảo đảm hết -101/-105.**
 
 ## Sử dụng
 
@@ -22,7 +32,7 @@ DNS IPv4 đổi trên Wi-Fi/Ethernet vật lý đang có default route tốt nh�
 
 1. Kiểm tra hosts hợp lệ, lưu trạng thái trước lần Apply. Nếu chọn đổi DNS, sao lưu DNS gốc trước lệnh đầu tiên: GUID, chế độ tự động/thủ công, danh sách DNS cũ. Dùng netsh **ipv4 dnsservers**, giữ nguyên IPv6/IP/gateway.
 2. Gỡ vùng hosts cũ của chính tool để thử DNS mới có ý nghĩa; xóa DNS cache; kiểm tra HTTPS Store, Community và Help.
-3. Nếu chưa đạt, lấy IP IPv4 mới qua DoH Cloudflare, dự phòng Google, thử HTTPS trực tiếp với đúng hostname/SNI và chứng chỉ TLS. Sao lưu hosts nguyên byte trước khi cập nhật vùng riêng, rồi kiểm tra qua Windows lần nữa.
+3. Nếu chưa đạt, lấy IP IPv4 mới qua cả DoH Cloudflare và Google (tối đa 3 IP mỗi resolver), thử HTTPS trực tiếp với đúng hostname/SNI và chứng chỉ TLS. Sao lưu hosts nguyên byte trước khi cập nhật vùng riêng, rồi kiểm tra qua Windows lần nữa.
 4. Nếu vẫn chưa đạt và cho phép DPI, giải nén engine **GoodbyeDPI 0.2.2 x64** chính thức cùng DLL/driver WinDivert. Kiểm tra SHA-256 gói nhúng, bảo vệ quyền ghi thư mục executable nâng quyền, rồi thử cấu hình 1: `-f 2 -e 2 --native-frag --max-payload=1200`; cấu hình 2: `-6`.
 5. Cả hai cấu hình dùng `--blacklist steam-domains.txt` chứa `steampowered.com`, `steamcommunity.com`, `steamstatic.com`. Mỗi cấu hình chờ khoảng 22 giây khởi tạo cộng thời gian thử mạng. Dừng cấu hình hiện tại trước khi thử tiếp.
 6. Nếu ba trang chính đạt, yêu cầu Steam thoát nhẹ rồi mở lại Store. Không ép tắt nếu Steam chưa chịu thoát. Nếu mọi cách được chọn thất bại, dừng DPI và cố trả DNS/hosts về trước lần Apply, bảo vệ sửa đổi đồng thời.

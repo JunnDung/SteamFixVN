@@ -1,5 +1,13 @@
 # Steam tại Việt Nam và hướng sửa — kiểm tra ngày 03/10/2026
 
+## Bổ sung ngày 04/10/2026: FPT, Store hoạt động nhưng Community/Profile lỗi
+
+Người báo lỗi cho biết máy FPT gặp -101/-105; trình duyệt cũng không truy cập được `steamcommunity.com` trong khi Store hoạt động. Chưa có nhật ký Apply từ máy này. Theo [Chromium net_error_list.h](https://chromium.googlesource.com/chromium/src/+/main/net/base/net_error_list.h), -101 là CONNECTION_RESET và -105 là NAME_NOT_RESOLVED. Chưa xác định bên gây reset hoặc khẳng định DPI chỉ từ mã lỗi.
+
+v1.2.1 sửa kiểm tra chỉ trang gốc và chấp nhận ngay HTTP chuyển hướng của v1.2. Tool thử thêm Community `/discussions/`, Profile `/my/` và theo chuyển hướng HTTPS Steam có giới hạn. Không đăng nhập trong phép thử; `/my/` chuyển tới login nên chưa chứng minh dữ liệu profile hoặc phiên Steam.
+
+Kiểm tra chỉ đọc trên máy phát triển ngày 04/10 đạt Store, Community, Discussions, Profile→login và Help qua Windows; ba URL Community cũng đạt qua IP DoH, với TLS bình thường. Máy này là kết nối Viettel được người dùng xác nhận trước đó, không phải máy FPT của bạn họ. Không đổi DNS/hosts hoặc nạp driver trong lần đo. Vì vậy không thể dùng kết quả này để khẳng định đã sửa xong FPT.
+
 ## Tình trạng tìm được
 
 VnExpress ngày 31/05/2024 đưa tin một số dịch vụ Steam bị chặn tại Việt Nam; đây là thông tin lịch sử, không phải phép đo toàn bộ ISP trong tháng 10/2026. [VnExpress](https://e.vnexpress.net/news/business/companies/gaming-platform-steam-blocked-in-vietnam-for-refusal-to-cooperate-with-authorities-4752391.html).

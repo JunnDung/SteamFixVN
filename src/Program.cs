@@ -34,7 +34,7 @@ internal sealed class MainForm : Form
 
     public MainForm(string? action)
     {
-        Text = "Steam Fix VN • 1.2 • DNS + DPI";
+        Text = "Steam Fix VN • 1.2.1 • DNS + DPI";
         ClientSize = new Size(800, 670);
         MinimumSize = new Size(760, 630);
         StartPosition = FormStartPosition.CenterScreen;
@@ -216,7 +216,7 @@ internal sealed class MainForm : Form
         }
         Log("Store / Community / Help truy cập HTTPS được. Đang mở lại Steam…");
         await RestartSteam();
-        Log("Hoàn tất kiểm tra web. Hãy kiểm tra Store trong Steam; phép thử này không xác nhận đăng nhập hoặc tải game.");
+        Log("Hoàn tất kiểm tra web. Hãy kiểm tra Store, Community và Profile trong Steam. Profile /my/ chưa đăng nhập chỉ kiểm tra đường tới trang đăng nhập; không xác nhận nội dung tài khoản hoặc tải game.");
         if (dpi.Running) Log("DPI đang bật cho các tên miền Steam. Giữ cửa sổ tool mở khi dùng Steam.");
         else Log("Không cần bật DPI trong lần kiểm tra này. DNS/hosts giữ đến khi bấm Khôi phục.");
     }
@@ -225,11 +225,11 @@ internal sealed class MainForm : Form
     {
         Log("Kiểm tra HTTPS qua cấu hình Windows…");
         bool ok = true;
-        foreach (string domain in FixEngine.Domains.Take(3))
+        foreach (var uri in FixEngine.WebChecks)
         {
-            bool reachable = await FixEngine.Probe(domain);
-            Log($"{domain}: {(reachable ? "HTTPS OK" : "CHƯA TRUY CẬP ĐƯỢC")}");
-            ok &= reachable;
+            var result = await FixEngine.ProbeDetailed(uri);
+            Log($"{uri.Host}{uri.AbsolutePath}: {(result.Success ? "HTTPS OK" : "CHƯA TRUY CẬP ĐƯỢC")} — {result.Detail}");
+            ok &= result.Success;
         }
         return ok;
     }
@@ -264,8 +264,7 @@ internal sealed class MainForm : Form
             Log("DNS IPv6 (tool giữ nguyên): " + string.Join(" / ", adapter.IPv6Servers));
         }
         catch (Exception e) { Log("Không đọc được adapter: " + e.Message); }
-        foreach (string domain in FixEngine.Domains.Take(3))
-            Log($"Windows → {domain}: {(await FixEngine.Probe(domain) ? "HTTPS OK" : "Không truy cập được")}");
+        await VerifyWindows();
         await FixEngine.Prepare(Log);
         Log("Đường kết nối qua IP DNS mã hóa hoạt động. Có thể dùng Apply.");
     }
