@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+.build-home/
+.packages/
+dist/
+releases/
+vendor/*
+!vendor/engine.zip
+!vendor/THIRD-PARTY-NOTICES.md
+!vendor/sources/
+!vendor/engine/
+vendor/engine/*
+!vendor/engine/licenses/
+.publish.ps1
