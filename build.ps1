@@ -19,6 +19,7 @@ Copy-Item vendor/engine/licenses/* dist/licenses -Force
 Copy-Item vendor/sources/* dist/third-party-sources -Force
 Copy-Item vendor/THIRD-PARTY-NOTICES.md dist -Force
 Copy-Item README.md dist/HUONG-DAN.md -Force
+Copy-Item LICENSE dist -Force
 Copy-Item RESEARCH-STEAM-VN.md dist -Force
 $releaseHash = Get-FileHash dist/SteamFixVN.exe -Algorithm SHA256
 ($releaseHash.Hash + '  SteamFixVN.exe') | Set-Content dist/SHA256.txt -Encoding ASCII

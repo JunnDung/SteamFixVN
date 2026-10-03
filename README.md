@@ -73,3 +73,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
 Script chạy kiểm tra, đóng gói EXE tự chứa runtime rồi chép giấy phép/mã nguồn dependency và hướng dẫn vào dist. Cache nằm trong workspace. Mã: `src/DnsSettings.cs`, `src/FixEngine.cs`, `src/DpiRuntime.cs`, `src/Program.cs`.
+
+## Giấy phép
+
+Mã nguồn SteamFixVN được phát hành theo [Apache License 2.0](LICENSE). GoodbyeDPI và WinDivert cùng các dependency giữ giấy phép riêng, xem [THIRD-PARTY-NOTICES.md](vendor/THIRD-PARTY-NOTICES.md) và các văn bản trong `vendor/engine/licenses`.
