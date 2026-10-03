@@ -34,7 +34,7 @@ internal sealed class MainForm : Form
 
     public MainForm(string? action)
     {
-        Text = "Steam Fix VN • 1.2.1 • DNS + DPI";
+        Text = "Steam Fix VN • 1.3 • DNS + DPI";
         ClientSize = new Size(800, 670);
         MinimumSize = new Size(760, 630);
         StartPosition = FormStartPosition.CenterScreen;
@@ -184,13 +184,19 @@ internal sealed class MainForm : Form
             {
                 Log("Bước 3: DNS/hosts chưa đủ; khởi tạo GoodbyeDPI.");
                 string engineDirectory = EnginePackage.Install();
-                for (int profile = 0; profile < DpiRuntime.Profiles.Length; profile++)
+                ok = await DpiRuntime.TryProfiles(
+                    profile => dpi.Start(engineDirectory, profile, Log), dpi.Stop,
+                    async () => await VerifyWindows() && dpi.Running,
+                    async () =>
                 {
-                    await dpi.Start(engineDirectory, profile, Log);
-                    if (await VerifyWindows() && dpi.Running) { ok = true; break; }
-                    dpi.Stop();
-                    Log("Cấu hình này chưa đạt; dừng trước khi thử cấu hình tiếp theo.");
-                }
+                    Log("Thử lại các IP DoH với DPI đang bật, thay vì giữ IP chưa kiểm chứng.");
+                    Dictionary<string, string> addresses;
+                    try { addresses = await FixEngine.Prepare(Log); }
+                    catch (IOException e) { Log("Chưa tìm được bộ IP với cấu hình này: " + e.Message); return false; }
+                    UpdateHosts(text => FixEngine.AddBlock(text, addresses));
+                    await FixEngine.Flush(Log);
+                    return await VerifyWindows() && dpi.Running;
+                }, Log);
             }
             if (!ok) throw new IOException("Các cách DNS/hosts/DPI đã chọn chưa giúp truy cập Steam. Có thể chặn IP hoặc Steam đang lỗi; hãy thử mạng khác/VPN.");
         }
@@ -265,6 +271,9 @@ internal sealed class MainForm : Form
         }
         catch (Exception e) { Log("Không đọc được adapter: " + e.Message); }
         await VerifyWindows();
+        var tls12 = await FixEngine.ProbeDetailed(new Uri("https://steamcommunity.com/"),
+            protocols: System.Security.Authentication.SslProtocols.Tls12);
+        Log($"Community với TLS 1.2: {(tls12.Success ? "HTTPS OK" : "CHƯA ĐẠT")} — {tls12.Detail}");
         await FixEngine.Prepare(Log);
         Log("Đường kết nối qua IP DNS mã hóa hoạt động. Có thể dùng Apply.");
     }

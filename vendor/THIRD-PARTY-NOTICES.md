@@ -1,6 +1,6 @@
 # Third-party components
 
-SteamFixVN 1.2 starts an unmodified external GoodbyeDPI executable. It does not link GoodbyeDPI or WinDivert into the C# application or modify their source/binaries.
+SteamFixVN 1.3 starts an unmodified external GoodbyeDPI executable. It does not link GoodbyeDPI or WinDivert into the C# application or modify their source/binaries.
 
 ## GoodbyeDPI 0.2.2
 

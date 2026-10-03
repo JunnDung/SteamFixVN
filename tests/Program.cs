@@ -47,6 +47,8 @@ if (args.Contains("--dns-read"))
 if (args.Contains("--community-read"))
 {
     var ips = await FixEngine.Resolve("steamcommunity.com");
+    var tls12 = await FixEngine.ProbeDetailed(new Uri("https://steamcommunity.com/"), protocols: System.Security.Authentication.SslProtocols.Tls12);
+    Console.WriteLine($"Windows Community TLS 1.2: {tls12.Success} — {tls12.Detail}");
     foreach (var uri in FixEngine.WebChecks)
     {
         var windows = await FixEngine.ProbeDetailed(uri);
@@ -99,6 +101,57 @@ var redirectLoop = await WebScenario(Enumerable.Repeat((302, (string?)"/my/"), 6
 Assert(!redirectLoop.Result.Success && redirectLoop.Requests == 6, "Redirect loops stop after a bounded number of requests");
 var storeLoginRedirect = await WebScenario((302, "https://login.steampowered.com/"), (200, null));
 Assert(storeLoginRedirect.Result.Success, "Cross-host HTTPS redirect inside the Steam allowlist is supported");
+using (var dnsHandler = new DoHHandler(false))
+using (var dnsClient = new HttpClient(dnsHandler))
+{
+    var ips = await FixEngine.ResolveWithClient(dnsClient, "steamcommunity.com").WaitAsync(TimeSpan.FromSeconds(3));
+    Assert(ips.SequenceEqual(new[] { "23.10.20.30", "23.10.20.31" }),
+        "Parallel DoH combines both providers, removes duplicates and rejects private DNS answers");
+}
+using (var dnsHandler = new DoHHandler(true))
+using (var dnsClient = new HttpClient(dnsHandler))
+{
+    var ips = await FixEngine.ResolveWithClient(dnsClient, "steamcommunity.com").WaitAsync(TimeSpan.FromSeconds(3));
+    Assert(ips.Contains("23.10.20.31"), "A failed Cloudflare request does not discard a valid Google answer");
+}
+int attempts = 0, stops = 0, refreshes = 0;
+bool active = false;
+bool selected = await DpiRuntime.TryProfiles(
+    profile => { if (active) throw new Exception("Overlapping engines"); active = true; attempts++; return Task.CompletedTask; },
+    () => { active = false; stops++; },
+    () => Task.FromResult(false),
+    () => { refreshes++; return Task.FromResult(attempts == 2); }, _ => { });
+Assert(selected && attempts == 2 && stops == 1 && refreshes == 2 && active,
+    "Failed pinned IP is retried under DPI; failed engine stops before next profile and winning engine stays alive");
+active = false; attempts = stops = refreshes = 0;
+selected = await DpiRuntime.TryProfiles(
+    _ => { attempts++; return Task.CompletedTask; }, () => stops++,
+    () => Task.FromResult(true),
+    () => { refreshes++; return Task.FromResult(false); }, _ => { });
+Assert(selected && attempts == 1 && stops == 0 && refreshes == 0,
+    "Successful initial HTTPS check skips address refresh and later profiles");
+attempts = stops = 0;
+selected = await DpiRuntime.TryProfiles(
+    _ => { attempts++; return Task.CompletedTask; }, () => stops++,
+    () => Task.FromResult(false), () => Task.FromResult(false), _ => { });
+Assert(!selected && attempts == DpiRuntime.Profiles.Length && stops == attempts,
+    "Exhausted strategy search is bounded and stops every failed engine");
+stops = 0;
+try
+{
+    await DpiRuntime.TryProfiles(_ => Task.CompletedTask, () => stops++,
+        () => Task.FromResult(false), () => throw new IOException("Concurrent hosts edit"), _ => { });
+    throw new Exception("Expected refresh error");
+}
+catch (IOException) { Assert(stops == 1, "Address refresh failure stops engine before propagating rollback error"); }
+stops = 0;
+try
+{
+    await DpiRuntime.TryProfiles(_ => throw new IOException("Driver failure"), () => stops++,
+        () => Task.FromResult(true), () => Task.FromResult(true), _ => { });
+    throw new Exception("Expected driver error");
+}
+catch (IOException) { Assert(stops == 1, "Driver initialization failure stops owned engine and aborts strategy search"); }
 var addresses = new Dictionary<string, string> { ["store.steampowered.com"] = "23.10.20.30" };
 foreach (string original in new[] { "", "# original", "# original\r\n", "# original\n127.0.0.1 localhost\n", "# café\r\n" })
 {
@@ -164,7 +217,9 @@ for (int profile = 0; profile < DpiRuntime.Profiles.Length; profile++)
 {
     var info = DpiRuntime.BuildStartInfo(@"C:\test folder\engine", profile);
     Assert(info.ArgumentList.Contains("--blacklist") && info.ArgumentList.Last().EndsWith("steam-domains.txt"), "Every DPI profile limited by Steam hostname list");
-    Assert(!info.ArgumentList.Contains("-p") && !info.ArgumentList.Contains("-q") && !info.ArgumentList.Contains("--dns-addr"), "No global reset/QUIC/DNS rules");
+    Assert(!info.ArgumentList.Contains("-p") && !info.ArgumentList.Contains("-q") && !info.ArgumentList.Contains("--dns-addr")
+        && !info.ArgumentList.Contains("--allow-no-sni") && !info.ArgumentList.Contains("--auto-ttl")
+        && !info.ArgumentList.Contains("-5") && !info.ArgumentList.Contains("--set-ttl"), "No global reset/QUIC/DNS, unscoped SNI or route-specific TTL rules");
     Assert(!info.UseShellExecute && info.CreateNoWindow && info.ArgumentList.Last().Contains("test folder"), "Safe argument handling for paths with spaces");
 }
 using (var owned = OwnedProcess.Start(HelperInfo("--child-wait")))
@@ -194,5 +249,22 @@ sealed class ScriptedWebHandler((int Status, string? Location)[] replies) : Syst
         var response = new System.Net.Http.HttpResponseMessage((System.Net.HttpStatusCode)reply.Status);
         if (reply.Location != null) response.Headers.Location = new Uri(reply.Location, UriKind.RelativeOrAbsolute);
         return Task.FromResult(response);
+    }
+}
+
+sealed class DoHHandler(bool failCloudflare) : System.Net.Http.HttpMessageHandler
+{
+    readonly TaskCompletionSource bothStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    int started;
+    protected override async Task<System.Net.Http.HttpResponseMessage> SendAsync(System.Net.Http.HttpRequestMessage request, CancellationToken token)
+    {
+        if (Interlocked.Increment(ref started) == 2) bothStarted.SetResult();
+        await bothStarted.Task.WaitAsync(token);
+        bool cloudflare = request.RequestUri!.Host == "1.1.1.1";
+        if (cloudflare && failCloudflare) throw new System.Net.Http.HttpRequestException("Resolver unavailable");
+        string json = cloudflare
+            ? """{"Status":0,"Answer":[{"type":1,"data":"23.10.20.30"},{"type":1,"data":"192.168.1.1"}]}"""
+            : """{"Status":0,"Answer":[{"type":1,"data":"23.10.20.30"},{"type":1,"data":"23.10.20.31"}]}""";
+        return new(System.Net.HttpStatusCode.OK) { Content = new System.Net.Http.StringContent(json) };
     }
 }

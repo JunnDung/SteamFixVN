@@ -67,26 +67,32 @@ public static class FixEngine
 
     public static async Task<List<string>> Resolve(string domain)
     {
-        var candidates = new List<string>();
-        foreach (string endpoint in new[] { "https://1.1.1.1/dns-query", "https://dns.google/resolve" })
+        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        return await ResolveWithClient(client, domain);
+    }
+
+    public static async Task<List<string>> ResolveWithClient(HttpClient client, string domain)
+    {
+        async Task<List<string>> Query(string endpoint)
         {
             try
             {
-                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-                client.DefaultRequestHeaders.Accept.ParseAdd("application/dns-json");
-                using var response = await client.GetAsync($"{endpoint}?name={Uri.EscapeDataString(domain)}&type=A");
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{endpoint}?name={Uri.EscapeDataString(domain)}&type=A");
+                request.Headers.Accept.ParseAdd("application/dns-json");
+                using var response = await client.SendAsync(request);
                 response.EnsureSuccessStatusCode();
                 using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                if (doc.RootElement.GetProperty("Status").GetInt32() != 0) continue;
-                if (!doc.RootElement.TryGetProperty("Answer", out var answer)) continue;
-                var ips = answer.EnumerateArray().Where(a => a.GetProperty("type").GetInt32() == 1)
+                if (doc.RootElement.GetProperty("Status").GetInt32() != 0) return [];
+                if (!doc.RootElement.TryGetProperty("Answer", out var answer)) return [];
+                return answer.EnumerateArray().Where(a => a.GetProperty("type").GetInt32() == 1)
                     .Select(a => a.GetProperty("data").GetString()!)
                     .Where(s => IPAddress.TryParse(s, out var ip) && IsPublicV4(ip)).Distinct().Take(3).ToList();
-                foreach (string ip in ips)
-                    if (!candidates.Contains(ip)) candidates.Add(ip);
             }
             catch (Exception e) when (e is HttpRequestException or TaskCanceledException or JsonException) { }
+            return [];
         }
+        var answers = await Task.WhenAll(Query("https://1.1.1.1/dns-query"), Query("https://dns.google/resolve"));
+        var candidates = answers.SelectMany(ips => ips).Distinct().ToList();
         if (candidates.Count > 0) return candidates;
         throw new IOException($"Không lấy được DNS mã hóa cho {domain}. Kiểm tra Internet hoặc thử mạng khác.");
     }
@@ -101,9 +107,11 @@ public static class FixEngine
         return true;
     }
 
-    public static async Task<WebProbe> ProbeDetailed(Uri uri, string? address = null, bool cdnRoot = false)
+    public static async Task<WebProbe> ProbeDetailed(Uri uri, string? address = null, bool cdnRoot = false,
+        System.Security.Authentication.SslProtocols protocols = System.Security.Authentication.SslProtocols.None)
     {
         using var handler = new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false };
+        handler.SslOptions.EnabledSslProtocols = protocols;
         if (address != null)
             handler.ConnectCallback = async (context, token) =>
             {
@@ -150,7 +158,8 @@ public static class FixEngine
         }
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or UriFormatException)
         {
-            return new(false, e is TaskCanceledException ? "Hết thời gian kết nối" : e.GetBaseException().Message);
+            return new(false, e is TaskCanceledException ? "Hết thời gian kết nối" :
+                e is HttpRequestException requestError ? $"{requestError.HttpRequestError}: {e.GetBaseException().Message}" : e.Message);
         }
     }
 
@@ -179,7 +188,7 @@ public static class FixEngine
             catch (IOException e)
             {
                 if (Domains.Take(3).Contains(domain))
-                    throw new IOException(e.Message + "\nChưa áp dụng. Có thể mạng chặn IP/SNI hoặc Steam đang lỗi; cần VPN/tunnel hoặc mạng khác nếu chặn sâu hơn DNS.", e);
+                    throw new IOException(e.Message + "\nChưa chọn được bộ IP kiểm chứng cho cấu hình này. Có thể mạng chặn IP/SNI hoặc Steam đang lỗi.", e);
                 log("  Bỏ qua mục phụ: " + e.Message);
             }
         }

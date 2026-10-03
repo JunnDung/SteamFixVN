@@ -146,8 +146,35 @@ public sealed class DpiRuntime : IDisposable
     public static readonly string[][] Profiles =
     [
         ["-f", "2", "-e", "2", "--native-frag", "--max-payload=1200"],
-        ["-6"]
+        ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--max-payload=1200"],
+        ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--max-payload=4096"],
+        ["-6", "--max-payload=4096"],
+        ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--wrong-chksum", "--max-payload=4096"],
+        ["-f", "2", "-e", "40", "--max-payload=4096"]
     ];
+    public static readonly string[] ProfileNames = [
+        "Phân mảnh thuận", "Phân mảnh đảo", "Phân mảnh đảo — payload lớn",
+        "Fake sequence — payload lớn", "Fake checksum — payload lớn", "Phân mảnh theo TCP window"
+    ];
+
+    public static async Task<bool> TryProfiles(Func<int, Task> start, Action stop,
+        Func<Task<bool>> verify, Func<Task<bool>> refreshAddresses, Action<string> log)
+    {
+        for (int profile = 0; profile < Profiles.Length; profile++)
+        {
+            bool success = false;
+            try
+            {
+                await start(profile);
+                success = await verify();
+                if (!success) success = await refreshAddresses();
+                if (success) return true;
+            }
+            finally { if (!success) stop(); }
+            log("Cấu hình này chưa đạt; đã dừng trước khi thử cấu hình tiếp theo.");
+        }
+        return false;
+    }
     OwnedProcess? child;
     Task<string>? stdout, stderr;
     public bool Running => child != null && !child.Process.HasExited;
@@ -169,7 +196,7 @@ public sealed class DpiRuntime : IDisposable
         child = OwnedProcess.Start(BuildStartInfo(directory, profile));
         stdout = Drain(child.Process.StandardOutput);
         stderr = Drain(child.Process.StandardError);
-        log($"GoodbyeDPI: thử cấu hình {profile + 1}; đang chờ driver khởi tạo…");
+        log($"GoodbyeDPI: {profile + 1}/{Profiles.Length} — {ProfileNames[profile]}; đang chờ driver khởi tạo…");
         // Upstream sleeps 20 seconds before exiting on driver errors, and buffers stdout in pipes.
         for (int i = 0; i < 22; i++)
         {

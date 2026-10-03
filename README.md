@@ -1,8 +1,17 @@
-# Steam Fix VN 1.2.1 — DNS IPv4 + DoH/hosts + GoodbyeDPI
+# Steam Fix VN 1.3 — DNS IPv4 + DoH/hosts + GoodbyeDPI
 
-Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.2.1.zip`.
+Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.3.zip`.
 
-**[Tải bản v1.2.1 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.2.1)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
+**[Tải bản v1.3 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.3)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
+
+## Bản 1.3: áp dụng nghiên cứu DNS/DPI
+
+Bản 1.3 gồm EXE tự chứa runtime, hướng dẫn, báo cáo nghiên cứu và giấy phép dependency. Xem [REPO-RESEARCH.md](REPO-RESEARCH.md) để đối chiếu tám repo, phương pháp áp dụng và phương pháp chưa tích hợp.
+
+- Sáu cấu hình DPI có tên: phân mảnh thuận/đảo, payload lớn, fake sequence/checksum và TCP window. Tự thử tuần tự, dừng cấu hình chưa đạt, giữ cấu hình đạt.
+- Nếu IP hiện tại vẫn lỗi sau khi bật DPI, thử lại các IP DoH với DPI đang chạy, cập nhật hosts và kiểm chứng qua Windows.
+- Cloudflare/Google DoH chạy song song; một resolver lỗi vẫn giữ kết quả từ resolver kia. Check bổ sung Community TLS 1.2 và phân loại lỗi kết nối.
+- 79 kiểm tra tự động đạt. Bộ orchestration dùng engine giả; chưa kiểm chứng sáu cấu hình driver thật hoặc Apply trên FPT. Có thể mất vài phút hoặc lâu hơn khi nhiều IP timeout.
 
 ## Store vào được nhưng Community/Profile lỗi trên FPT
 
@@ -19,7 +28,7 @@ Kiểm tra ngày 04/10/2026: 60 kiểm tra tự động đạt, gồm hồi quy 
 1. Lưu game đang chơi trước khi dùng.
 2. Chọn DNS IPv4: Google `8.8.8.8 / 8.8.4.4`, Cloudflare `1.1.1.1 / 1.0.0.1`, hoặc giữ DNS hiện tại. Mặc định Google để thử trên Viettel/Windows 11 theo bối cảnh hiện tại; không bảo đảm mọi kết nối Viettel.
 3. Bấm **Apply**, chấp nhận UAC. Tool mở lại nâng quyền, giữ lựa chọn DNS/DPI và tự tiếp tục.
-4. Đợi tool thử từng bước. Nếu DNS/hosts đã giúp truy cập HTTPS được, không nạp driver DPI. Nếu vẫn lỗi và tùy chọn DPI được chọn, tool thử hai cấu hình GoodbyeDPI.
+4. Đợi tool thử từng bước. Nếu DNS/hosts đã giúp truy cập HTTPS được, không nạp driver DPI. Nếu vẫn lỗi và tùy chọn DPI được chọn, tool thử tối đa sáu cấu hình GoodbyeDPI.
 5. Kiểm tra Store/Community trong Steam sau khi tool mở lại Steam. Nếu nhật ký cho biết **DPI đang bật**, giữ tool mở; đóng tool dừng DPI. DNS/hosts vẫn giữ đến khi Khôi phục.
 
 DNS IPv4 đổi trên Wi-Fi/Ethernet vật lý đang có default route tốt nhất; ảnh hưởng các ứng dụng sử dụng card đó. Tool không tự sửa adapter VPN hoặc tất cả card mạng. Không tìm thấy card phù hợp thì báo lỗi trước khi đổi DNS. Khi preset đã giống cấu hình đang có, tool bỏ qua lệnh đổi DNS.
@@ -33,8 +42,8 @@ DNS IPv4 đổi trên Wi-Fi/Ethernet vật lý đang có default route tốt nh�
 1. Kiểm tra hosts hợp lệ, lưu trạng thái trước lần Apply. Nếu chọn đổi DNS, sao lưu DNS gốc trước lệnh đầu tiên: GUID, chế độ tự động/thủ công, danh sách DNS cũ. Dùng netsh **ipv4 dnsservers**, giữ nguyên IPv6/IP/gateway.
 2. Gỡ vùng hosts cũ của chính tool để thử DNS mới có ý nghĩa; xóa DNS cache; kiểm tra HTTPS Store, Community và Help.
 3. Nếu chưa đạt, lấy IP IPv4 mới qua cả DoH Cloudflare và Google (tối đa 3 IP mỗi resolver), thử HTTPS trực tiếp với đúng hostname/SNI và chứng chỉ TLS. Sao lưu hosts nguyên byte trước khi cập nhật vùng riêng, rồi kiểm tra qua Windows lần nữa.
-4. Nếu vẫn chưa đạt và cho phép DPI, giải nén engine **GoodbyeDPI 0.2.2 x64** chính thức cùng DLL/driver WinDivert. Kiểm tra SHA-256 gói nhúng, bảo vệ quyền ghi thư mục executable nâng quyền, rồi thử cấu hình 1: `-f 2 -e 2 --native-frag --max-payload=1200`; cấu hình 2: `-6`.
-5. Cả hai cấu hình dùng `--blacklist steam-domains.txt` chứa `steampowered.com`, `steamcommunity.com`, `steamstatic.com`. Mỗi cấu hình chờ khoảng 22 giây khởi tạo cộng thời gian thử mạng. Dừng cấu hình hiện tại trước khi thử tiếp.
+4. Nếu vẫn chưa đạt và cho phép DPI, giải nén engine **GoodbyeDPI 0.2.2 x64** chính thức cùng DLL/driver WinDivert. Kiểm tra SHA-256 gói nhúng, bảo vệ quyền ghi thư mục executable nâng quyền, rồi thử tối đa sáu cấu hình trong `REPO-RESEARCH.md`. Nếu HTTPS chưa đạt, tìm lại IP kiểm chứng với DPI đang bật trước khi chuyển cấu hình.
+5. Mọi cấu hình dùng `--blacklist steam-domains.txt` chứa `steampowered.com`, `steamcommunity.com`, `steamstatic.com`. Mỗi cấu hình chờ khoảng 22 giây khởi tạo cộng thời gian thử mạng. Dừng cấu hình hiện tại trước khi thử tiếp.
 6. Nếu ba trang chính đạt, yêu cầu Steam thoát nhẹ rồi mở lại Store. Không ép tắt nếu Steam chưa chịu thoát. Nếu mọi cách được chọn thất bại, dừng DPI và cố trả DNS/hosts về trước lần Apply, bảo vệ sửa đổi đồng thời.
 
 DNS gốc được giữ qua nhiều lần Apply và qua việc đóng/mở tool, đến khi Khôi phục. Journal được ghi trước lệnh để hỗ trợ khôi phục nếu chương trình bị gián đoạn giữa hai lệnh đặt DNS. GUID giúp tránh nhầm adapter khi Windows đổi/recycle interface index.
