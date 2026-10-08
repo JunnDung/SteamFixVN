@@ -145,22 +145,25 @@ public sealed class DpiRuntime : IDisposable
 {
     public static readonly string[][] Profiles =
     [
+        ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--max-payload=4096"],
         ["-f", "2", "-e", "2", "--native-frag", "--max-payload=1200"],
         ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--max-payload=1200"],
-        ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--max-payload=4096"],
         ["-6", "--max-payload=4096"],
         ["-f", "2", "-e", "2", "--native-frag", "--reverse-frag", "--wrong-chksum", "--max-payload=4096"],
         ["-f", "2", "-e", "40", "--max-payload=4096"]
     ];
     public static readonly string[] ProfileNames = [
-        "Phân mảnh thuận", "Phân mảnh đảo", "Phân mảnh đảo — payload lớn",
+        "Phân mảnh đảo — payload lớn", "Phân mảnh thuận", "Phân mảnh đảo",
         "Fake sequence — payload lớn", "Fake checksum — payload lớn", "Phân mảnh theo TCP window"
     ];
 
     public static async Task<bool> TryProfiles(Func<int, Task> start, Action stop,
-        Func<Task<bool>> verify, Func<Task<bool>> refreshAddresses, Action<string> log)
+        Func<Task<bool>> verify, Func<Task<bool>> refreshAddresses, Action<string> log, int? selectedProfile = null)
     {
-        for (int profile = 0; profile < Profiles.Length; profile++)
+        if (selectedProfile is < 0 || selectedProfile >= Profiles.Length)
+            throw new ArgumentOutOfRangeException(nameof(selectedProfile));
+        int first = selectedProfile ?? 0, end = selectedProfile.HasValue ? first + 1 : Profiles.Length;
+        for (int profile = first; profile < end; profile++)
         {
             bool success = false;
             try
@@ -171,12 +174,13 @@ public sealed class DpiRuntime : IDisposable
                 if (success) return true;
             }
             finally { if (!success) stop(); }
-            log("Cấu hình này chưa đạt; đã dừng trước khi thử cấu hình tiếp theo.");
+            log(selectedProfile.HasValue ? "Cấu hình đã chọn chưa đạt; đã dừng engine." : "Cấu hình này chưa đạt; đã dừng trước khi thử cấu hình tiếp theo.");
         }
         return false;
     }
     OwnedProcess? child;
     Task<string>? stdout, stderr;
+    public int LastProfile { get; private set; } = -1;
     public bool Running => child != null && !child.Process.HasExited;
     public static ProcessStartInfo BuildStartInfo(string directory, int profile)
     {
@@ -194,6 +198,7 @@ public sealed class DpiRuntime : IDisposable
     {
         Stop();
         child = OwnedProcess.Start(BuildStartInfo(directory, profile));
+        LastProfile = profile;
         stdout = Drain(child.Process.StandardOutput);
         stderr = Drain(child.Process.StandardError);
         log($"GoodbyeDPI: {profile + 1}/{Profiles.Length} — {ProfileNames[profile]}; đang chờ driver khởi tạo…");

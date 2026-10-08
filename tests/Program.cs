@@ -63,6 +63,21 @@ if (args.Contains("--community-read"))
     Console.WriteLine("Read-only check; no DNS/hosts changes or DPI driver loading. /my/ checks anonymous login routing only.");
     return;
 }
+if (args.Contains("--payment-read"))
+{
+    foreach (var uri in FixEngine.WebChecks.Where(uri => uri.Host is "store.steampowered.com" or "checkout.steampowered.com"))
+    {
+        var windows = await FixEngine.ProbeDetailed(uri);
+        Console.WriteLine($"Windows {uri}: {windows.Success} — {windows.Detail}");
+        foreach (string ip in await FixEngine.Resolve(uri.Host))
+        {
+            var direct = await FixEngine.ProbeDetailed(uri, ip);
+            Console.WriteLine($"DoH {ip} {uri}: {direct.Success} — {direct.Detail}");
+        }
+    }
+    Console.WriteLine("Read-only anonymous check; no account, cart change, purchase, DNS/hosts edit or driver loading.");
+    return;
+}
 int count = 0;
 void Assert(bool condition, string name)
 {
@@ -101,6 +116,18 @@ var redirectLoop = await WebScenario(Enumerable.Repeat((302, (string?)"/my/"), 6
 Assert(!redirectLoop.Result.Success && redirectLoop.Requests == 6, "Redirect loops stop after a bounded number of requests");
 var storeLoginRedirect = await WebScenario((302, "https://login.steampowered.com/"), (200, null));
 Assert(storeLoginRedirect.Result.Success, "Cross-host HTTPS redirect inside the Steam allowlist is supported");
+Assert(FixEngine.WebChecks.Any(uri => uri.Host == "checkout.steampowered.com" && uri.AbsolutePath == "/checkout/")
+    && FixEngine.WebChecks.Any(uri => uri.Host == "store.steampowered.com" && uri.AbsolutePath == "/cart/"),
+    "Checkout and cart are required web checks even when the Store root works");
+Assert(FixEngine.WebChecks.Any(uri => uri.AbsoluteUri == "https://checkout.steampowered.com/checkout/?accountcart=1"),
+    "Checkout verification includes the reported account-cart URL");
+using (var checkoutHandler = new ScriptedWebHandler([(302, "/login/"), (503, null)]))
+using (var checkoutClient = new HttpClient(checkoutHandler))
+{
+    var result = await FixEngine.ProbeWithClient(checkoutClient, new Uri("https://checkout.steampowered.com/checkout/"));
+    Assert(!result.Success && checkoutHandler.Requests.Count == 2,
+        "Checkout redirect to an unavailable login page is a failure, not a successful payment check");
+}
 using (var dnsHandler = new DoHHandler(false))
 using (var dnsClient = new HttpClient(dnsHandler))
 {
@@ -130,6 +157,31 @@ selected = await DpiRuntime.TryProfiles(
     () => { refreshes++; return Task.FromResult(false); }, _ => { });
 Assert(selected && attempts == 1 && stops == 0 && refreshes == 0,
     "Successful initial HTTPS check skips address refresh and later profiles");
+var triedProfiles = new List<int>();
+stops = refreshes = 0;
+selected = await DpiRuntime.TryProfiles(
+    profile => { triedProfiles.Add(profile); return Task.CompletedTask; }, () => stops++,
+    () => Task.FromResult(true),
+    () => { refreshes++; return Task.FromResult(false); }, _ => { }, selectedProfile: 2);
+Assert(selected && triedProfiles.SequenceEqual(new[] { 2 }) && stops == 0 && refreshes == 0,
+    "Manual retry selects the requested DPI profile even when web verification succeeds");
+triedProfiles.Clear(); stops = 0;
+selected = await DpiRuntime.TryProfiles(
+    profile => { triedProfiles.Add(profile); return Task.CompletedTask; }, () => stops++,
+    () => Task.FromResult(false), () => Task.FromResult(false), _ => { }, selectedProfile: 2);
+Assert(!selected && triedProfiles.SequenceEqual(new[] { 2 }) && stops == 1,
+    "Failed manual profile stops without silently selecting another profile");
+foreach (int invalidProfile in new[] { -1, DpiRuntime.Profiles.Length })
+{
+    attempts = 0;
+    try
+    {
+        await DpiRuntime.TryProfiles(_ => { attempts++; return Task.CompletedTask; }, () => { },
+            () => Task.FromResult(true), () => Task.FromResult(true), _ => { }, invalidProfile);
+        throw new Exception("Expected invalid profile rejection");
+    }
+    catch (ArgumentOutOfRangeException) { Assert(attempts == 0, "Invalid manual profile rejected before starting an engine"); }
+}
 attempts = stops = 0;
 selected = await DpiRuntime.TryProfiles(
     _ => { attempts++; return Task.CompletedTask; }, () => stops++,
@@ -211,6 +263,9 @@ Reject(() => DnsSettings.Commands(12, false, ["2606:4700:4700::1111"]), "IPv6 ad
 var roundTripDns = System.Text.Json.JsonSerializer.Deserialize<DnsJournal>(System.Text.Json.JsonSerializer.Serialize(journalDns))!;
 Assert(roundTripDns.Original.Automatic && roundTripDns.Original.Id == originalDns.Id && roundTripDns.Original.IPv6Servers.SequenceEqual(originalDns.IPv6Servers), "Recovery record preserves mode, GUID and IPv6 snapshot");
 var package = EnginePackage.Read();
+Assert(DpiRuntime.Profiles[0].Contains("--native-frag") && DpiRuntime.Profiles[0].Contains("--reverse-frag")
+    && DpiRuntime.Profiles[0].Contains("--max-payload=4096"),
+    "Automatic DPI starts with the profile confirmed to open Checkout on the reported FPT connection");
 Assert(package.ContainsKey("goodbyedpi.exe") && package.ContainsKey("WinDivert.dll") && package.ContainsKey("WinDivert64.sys"), "Pinned engine archive contains all x64 dependencies");
 Assert(package.Keys.Count(k => k.StartsWith("licenses/")) == 4, "Upstream licenses included");
 for (int profile = 0; profile < DpiRuntime.Profiles.Length; profile++)

@@ -12,6 +12,8 @@ public static class FixEngine
     public static readonly string[] Domains = ["store.steampowered.com", "steamcommunity.com", "help.steampowered.com", "login.steampowered.com", "checkout.steampowered.com", "store.akamai.steamstatic.com", "community.akamai.steamstatic.com", "shared.akamai.steamstatic.com", "avatars.akamai.steamstatic.com"];
     public static readonly Uri[] WebChecks = [
         new("https://store.steampowered.com/"),
+        new("https://store.steampowered.com/cart/"),
+        new("https://checkout.steampowered.com/checkout/?accountcart=1"),
         new("https://steamcommunity.com/"),
         new("https://steamcommunity.com/discussions/"),
         new("https://steamcommunity.com/my/"),
@@ -187,7 +189,7 @@ public static class FixEngine
             }
             catch (IOException e)
             {
-                if (Domains.Take(3).Contains(domain))
+                if (WebChecks.Any(uri => uri.Host == domain))
                     throw new IOException(e.Message + "\nChưa chọn được bộ IP kiểm chứng cho cấu hình này. Có thể mạng chặn IP/SNI hoặc Steam đang lỗi.", e);
                 log("  Bỏ qua mục phụ: " + e.Message);
             }

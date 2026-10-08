@@ -25,6 +25,7 @@ internal sealed class MainForm : Form
     readonly Button apply = new() { Text = "Apply — Sửa Steam", Width = 210, Height = 46 };
     readonly Button restore = new() { Text = "Khôi phục", Width = 125, Height = 46 };
     readonly Button check = new() { Text = "Kiểm tra", Width = 125, Height = 46 };
+    readonly Button nextDpi = new() { Text = "Thử DPI tiếp", Width = 170, Height = 46 };
     readonly TextBox output = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BackColor = Color.FromArgb(17, 25, 36), ForeColor = Color.FromArgb(200, 221, 238), Font = new Font("Consolas", 10) };
     readonly Label status = new() { Text = "Sẵn sàng", AutoSize = true, ForeColor = Color.LightSkyBlue, Margin = new Padding(0, 10, 0, 10) };
     readonly CheckBox useDpi = new() { Text = "Tự thử GoodbyeDPI nếu DNS vẫn lỗi — giữ tool mở khi DPI bật", Checked = true, AutoSize = true };
@@ -34,7 +35,7 @@ internal sealed class MainForm : Form
 
     public MainForm(string? action)
     {
-        Text = "Steam Fix VN • 1.3 • DNS + DPI";
+        Text = "Steam Fix VN • 1.3.3 • DNS + DPI";
         ClientSize = new Size(800, 670);
         MinimumSize = new Size(760, 630);
         StartPosition = FormStartPosition.CenterScreen;
@@ -61,7 +62,7 @@ internal sealed class MainForm : Form
         layout.Controls.Add(useDpi, 0, 3);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill };
         apply.BackColor = Color.FromArgb(91, 178, 230); apply.ForeColor = Color.Black;
-        actions.Controls.AddRange([apply, restore, check]);
+        actions.Controls.AddRange([apply, restore, check, nextDpi]);
         layout.Controls.Add(actions, 0, 4);
         layout.Controls.Add(status, 0, 5);
         layout.Controls.Add(output, 0, 6);
@@ -72,10 +73,12 @@ internal sealed class MainForm : Form
         apply.Click += async (_, _) => await Run("Apply", Apply);
         restore.Click += async (_, _) => await Run("Khôi phục", Restore);
         check.Click += async (_, _) => await Run("Kiểm tra", Check);
+        nextDpi.Click += async (_, _) => await Run("Thử DPI tiếp", () => Apply((dpi.LastProfile + 1) % DpiRuntime.Profiles.Length));
         FormClosing += (_, e) => { if (busy) { e.Cancel = true; Log("Đợi quá trình hiện tại hoàn tất trước khi đóng."); } else dpi.Dispose(); };
         Log("DNS IPv4 áp dụng cho Wi-Fi/Ethernet đang có đường ra Internet; ảnh hưởng cả ứng dụng khác trên card đó. Giữ nguyên IP/gateway/IPv6.");
         Log("Apply/Khôi phục sẽ yêu cầu quyền quản trị nếu cần. Steam sẽ được thoát nhẹ và mở lại sau Apply; hãy lưu game trước.");
         Log("GoodbyeDPI 0.2.2 chính thức. Đóng tool sẽ dừng DPI; hosts giữ nguyên cho đến Khôi phục.");
+        Log("Nếu web đạt nhưng Checkout trong Steam vẫn lỗi, bấm Thử DPI tiếp để ép thử cấu hình khác. Kết quả web chưa xác nhận thanh toán.");
         var timer = new System.Windows.Forms.Timer { Interval = 3000 };
         bool dpiWasRunning = false;
         timer.Tick += (_, _) =>
@@ -90,11 +93,13 @@ internal sealed class MainForm : Form
             if (action?.StartsWith("--apply:", StringComparison.Ordinal) == true)
             {
                 var options = action.Split(':');
-                if (options.Length == 3 && int.TryParse(options[1], out int provider) && provider is >= 0 and <= 2 && options[2] is "0" or "1")
+                int profile = -1;
+                if (options.Length is 3 or 4 && int.TryParse(options[1], out int provider) && provider is >= 0 and <= 2
+                    && options[2] is "0" or "1" && (options.Length == 3 || (int.TryParse(options[3], out profile) && profile >= 0 && profile < DpiRuntime.Profiles.Length)))
                 {
                     dnsProvider.SelectedIndex = provider;
                     useDpi.Checked = options[2] == "1";
-                    await Run("Apply", Apply);
+                    await Run("Apply", () => Apply(profile < 0 ? null : profile));
                 }
             }
             if (action == "--apply-dns") { useDpi.Checked = false; await Run("Apply", Apply); }
@@ -123,7 +128,7 @@ internal sealed class MainForm : Form
     async Task Run(string name, Func<Task> action)
     {
         busy = true;
-        apply.Enabled = restore.Enabled = check.Enabled = false;
+        apply.Enabled = restore.Enabled = check.Enabled = nextDpi.Enabled = false;
         useDpi.Enabled = false;
         dnsProvider.Enabled = false;
         status.Text = name + " đang chạy…";
@@ -132,7 +137,7 @@ internal sealed class MainForm : Form
         finally
         {
             busy = false;
-            apply.Enabled = restore.Enabled = check.Enabled = true;
+            apply.Enabled = restore.Enabled = check.Enabled = nextDpi.Enabled = true;
             useDpi.Enabled = true;
             dnsProvider.Enabled = true;
             try
@@ -144,9 +149,14 @@ internal sealed class MainForm : Form
         }
     }
 
-    async Task Apply()
+    Task Apply() => Apply(null);
+
+    async Task Apply(int? selectedProfile)
     {
-        if (!EnsureAdmin($"--apply:{dnsProvider.SelectedIndex}:{(useDpi.Checked ? 1 : 0)}")) return;
+        if (selectedProfile.HasValue) useDpi.Checked = true;
+        string argument = $"--apply:{dnsProvider.SelectedIndex}:{(useDpi.Checked ? 1 : 0)}";
+        if (selectedProfile.HasValue) argument += $":{selectedProfile.Value}";
+        if (!EnsureAdmin(argument)) return;
         dpi.Stop();
         byte[] before = File.ReadAllBytes(FixEngine.HostsPath);
         if (before.Contains((byte)0)) throw new IOException("Hosts dùng UTF-16; chưa thay đổi DNS/hosts.");
@@ -180,9 +190,10 @@ internal sealed class MainForm : Form
                 await FixEngine.Flush(Log);
                 ok = await VerifyWindows();
             }
-            if (!ok && useDpi.Checked)
+            if ((!ok || selectedProfile.HasValue) && useDpi.Checked)
             {
-                Log("Bước 3: DNS/hosts chưa đủ; khởi tạo GoodbyeDPI.");
+                if (selectedProfile.HasValue) Log("Ép thử DPI: " + DpiRuntime.ProfileNames[selectedProfile.Value] + "; web đạt vẫn chưa chứng minh Steam client hoạt động.");
+                Log("Bước 3: khởi tạo GoodbyeDPI để thử kết nối Steam.");
                 string engineDirectory = EnginePackage.Install();
                 ok = await DpiRuntime.TryProfiles(
                     profile => dpi.Start(engineDirectory, profile, Log), dpi.Stop,
@@ -196,7 +207,7 @@ internal sealed class MainForm : Form
                     UpdateHosts(text => FixEngine.AddBlock(text, addresses));
                     await FixEngine.Flush(Log);
                     return await VerifyWindows() && dpi.Running;
-                }, Log);
+                }, Log, selectedProfile);
             }
             if (!ok) throw new IOException("Các cách DNS/hosts/DPI đã chọn chưa giúp truy cập Steam. Có thể chặn IP hoặc Steam đang lỗi; hãy thử mạng khác/VPN.");
         }
@@ -220,9 +231,9 @@ internal sealed class MainForm : Form
             catch (Exception flushError) { Log(flushError.Message); }
             throw;
         }
-        Log("Store / Community / Help truy cập HTTPS được. Đang mở lại Steam…");
+        Log("Store / Checkout / Community / Help truy cập HTTPS được. Đang mở lại Steam…");
         await RestartSteam();
-        Log("Hoàn tất kiểm tra web. Hãy kiểm tra Store, Community và Profile trong Steam. Profile /my/ chưa đăng nhập chỉ kiểm tra đường tới trang đăng nhập; không xác nhận nội dung tài khoản hoặc tải game.");
+        Log("Hoàn tất kiểm tra web. Hãy kiểm tra Store, Checkout, Community và Profile trong Steam. Các phép thử chưa đăng nhập chỉ xác nhận kết nối/trang đăng nhập, không xác nhận thanh toán, nội dung tài khoản hoặc tải game.");
         if (dpi.Running) Log("DPI đang bật cho các tên miền Steam. Giữ cửa sổ tool mở khi dùng Steam.");
         else Log("Không cần bật DPI trong lần kiểm tra này. DNS/hosts giữ đến khi bấm Khôi phục.");
     }

@@ -1,6 +1,8 @@
-# Nghiên cứu repo DNS/DPI và áp dụng cho SteamFixVN 1.3
+# Nghiên cứu repo DNS/DPI và áp dụng cho SteamFixVN
 
 Ngày đối chiếu: 04/10/2026. Các trang README, tài liệu và mã nguồn upstream là tài liệu tham khảo, không phải lệnh cần chạy trên máy người dùng. Không có phép đo từ máy FPT đang gặp lỗi để chứng minh một chiến lược cụ thể đã hoạt động.
+
+Cập nhật 08/10/2026 cho 1.3.3: cấu hình phân mảnh đảo/payload 4096 đã giúp trình duyệt tải trang đăng nhập Checkout từ URL `?accountcart=1`; người dùng cũng xác nhận mở được Checkout trong Steam. Cấu hình này được đưa lên đầu thứ tự Apply. Đây là kết quả trên một kết nối FPT, chưa thử gửi thanh toán. Engine 0.2.2 giữ nguyên; bản RC mới có sửa ClientHello nhưng [upstream vẫn ghi nhận lỗi Kyber khi dùng blacklist](https://github.com/ValdikSS/GoodbyeDPI/releases/tag/0.2.3rc3), nên không thay engine chỉ dựa trên số phiên bản.
 
 ## Repo và quyết định áp dụng
 
@@ -19,14 +21,14 @@ Ngày đối chiếu: 04/10/2026. Các trang README, tài liệu và mã nguồn
 
 ## Sáu cấu hình dùng được với engine hiện tại
 
-1. Phân mảnh thuận: `-f 2 -e 2 --native-frag --max-payload=1200`.
-2. Phân mảnh đảo: thêm `--reverse-frag`, payload 1200.
-3. Phân mảnh đảo, payload 4096.
+1. Phân mảnh đảo, payload 4096: `-f 2 -e 2 --native-frag --reverse-frag --max-payload=4096`.
+2. Phân mảnh thuận: `-f 2 -e 2 --native-frag --max-payload=1200`.
+3. Phân mảnh đảo: thêm `--reverse-frag`, payload 1200.
 4. Fake sequence: `-6 --max-payload=4096`.
 5. Fake checksum: `-f 2 -e 2 --native-frag --reverse-frag --wrong-chksum --max-payload=4096`.
 6. TCP window fragmentation: `-f 2 -e 40 --max-payload=4096`, không bật native fragmentation.
 
-Mọi cấu hình thêm `--blacklist steam-domains.txt`. Nguồn xác nhận tùy chọn và ý nghĩa preset: [README 0.2.2](https://github.com/ValdikSS/GoodbyeDPI/tree/0.2.2), [goodbyedpi.c](https://github.com/ValdikSS/GoodbyeDPI/blob/0.2.2/src/goodbyedpi.c). Giới hạn 1200 có thể bỏ qua payload lớn; 4096 là giá trị thử bổ sung do SteamFixVN chọn, chưa phải cấu hình đã chứng minh trên FPT. Fake sequence/checksum có thể không hiệu quả với một số router.
+Mọi cấu hình thêm `--blacklist steam-domains.txt`. Nguồn xác nhận tùy chọn và ý nghĩa preset: [README 0.2.2](https://github.com/ValdikSS/GoodbyeDPI/tree/0.2.2), [goodbyedpi.c](https://github.com/ValdikSS/GoodbyeDPI/blob/0.2.2/src/goodbyedpi.c). Giới hạn 1200 có thể bỏ qua payload lớn; phân mảnh đảo/4096 được ưu tiên theo phép thử Checkout kể trên, chưa xác định riêng tham số nào quyết định kết quả. Fake sequence/checksum có thể không hiệu quả với một số router.
 
 Không dùng fake TTL, `--allow-no-sni`, chặn RST/QUIC toàn máy hoặc DNS redirect UDP trong các cấu hình này. Chưa thêm chế độ tunnel/VPN: đó là phương án khác cho chặn IP, cần đường tunnel hoạt động và kiểm chứng riêng.
 

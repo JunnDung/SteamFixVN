@@ -1,4 +1,20 @@
-# Steam Fix VN 1.3 — DNS IPv4 + DoH/hosts + GoodbyeDPI
+# Steam Fix VN 1.3.3 — DNS IPv4 + DoH/hosts + GoodbyeDPI
+
+## Sửa lựa chọn DPI cho Checkout trên kết nối FPT đã kiểm tra
+
+Ngày 08/10/2026, ở cấu hình 1/6 của bản 1.3.2, phép thử hệ thống tới `https://checkout.steampowered.com/checkout/?accountcart=1` chuyển tới login thành công, nhưng trình duyệt vẫn báo `ERR_CONNECTION_RESET`. Sau khi chuyển tới cấu hình 3/6 **Phân mảnh đảo — payload lớn**, trình duyệt tải được trang đăng nhập của Checkout; người dùng xác nhận Checkout trong Steam cũng mở được. Đây là kết quả trên kết nối FPT này, không bảo đảm mọi đường mạng.
+
+Bản 1.3.3 ưu tiên cấu hình đã giúp mở Checkout đó ở vị trí **1/6**, thay vì dừng ở phân mảnh thuận/payload 1200 chỉ đạt phép thử hệ thống. Check/Apply và chọn IP kiểm tra URL có `accountcart=1`. Engine vẫn là GoodbyeDPI 0.2.2 chính thức, phạm vi hostname Steam giữ nguyên. Không hạ bảo mật TLS hoặc sửa cookie/phiên đăng nhập.
+
+Nếu bản 1.3.2 đang mở Checkout được ở 3/6, có thể tiếp tục dùng và giữ tool mở. Khi chuyển bản: lưu game, đóng tool cũ, chạy `dist/1.3.3/SteamFixVN.exe`, bấm **Apply**, chấp nhận UAC và đợi Steam mở lại. Khi cần DPI, nhật ký sẽ bắt đầu ở **1/6 — Phân mảnh đảo — payload lớn**. Nếu web đạt nhưng Steam vẫn lỗi, **Thử DPI tiếp** ép thử từng cấu hình; cấu hình thất bại dừng engine và cố trả DNS/hosts về trước lần thử. Sau cấu hình 6 sẽ quay về 1.
+
+87 kiểm tra tự động đạt, gồm thứ tự cấu hình đã kiểm chứng, URL account-cart, chọn đúng cấu hình thủ công và rollback. Repo chứa mã nguồn 1.3.3; có thể tự build theo hướng dẫn bên dưới. Gói ZIP 1.3.3 hiện mới được tạo tại máy phát triển; GitHub release bên dưới vẫn là v1.3. Đã xác nhận mở Checkout trên kết nối báo lỗi; chưa thử gửi thanh toán hoặc mua hàng.
+
+## Sửa kiểm tra Checkout trong 1.3.1
+
+Bản 1.3.1 thêm Store `/cart/` và Checkout `/checkout/` vào các phép thử bắt buộc của Check/Apply và khi chọn IP DoH. Checkout lỗi không còn bị bỏ qua như mục phụ. 81 kiểm tra tự động đạt. Bản build mới nằm tại `dist/1.3.1/SteamFixVN.exe`; ZIP tại `releases/SteamFixVN-1.3.1.zip`. GitHub release liên kết bên dưới vẫn là bản 1.3.
+
+Đóng cửa sổ tool cũ trước khi chạy bản mới, lưu game rồi Apply và chấp nhận UAC. Sau đó mở lại trang Checkout. Phép thử không đăng nhập, không tạo giao dịch; `/checkout/` chuyển tới login chỉ chứng minh đường kết nối đó hoạt động. Nếu vẫn -101/-105 trong phiên đăng nhập, gửi tên miền/đường dẫn lỗi đã bỏ token, mã giao dịch và dữ liệu thẻ. Chưa xác nhận sửa được giao dịch thực tế trên FPT.
 
 Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.3.zip`.
 
@@ -29,7 +45,7 @@ Kiểm tra ngày 04/10/2026: 60 kiểm tra tự động đạt, gồm hồi quy 
 2. Chọn DNS IPv4: Google `8.8.8.8 / 8.8.4.4`, Cloudflare `1.1.1.1 / 1.0.0.1`, hoặc giữ DNS hiện tại. Mặc định Google để thử trên Viettel/Windows 11 theo bối cảnh hiện tại; không bảo đảm mọi kết nối Viettel.
 3. Bấm **Apply**, chấp nhận UAC. Tool mở lại nâng quyền, giữ lựa chọn DNS/DPI và tự tiếp tục.
 4. Đợi tool thử từng bước. Nếu DNS/hosts đã giúp truy cập HTTPS được, không nạp driver DPI. Nếu vẫn lỗi và tùy chọn DPI được chọn, tool thử tối đa sáu cấu hình GoodbyeDPI.
-5. Kiểm tra Store/Community trong Steam sau khi tool mở lại Steam. Nếu nhật ký cho biết **DPI đang bật**, giữ tool mở; đóng tool dừng DPI. DNS/hosts vẫn giữ đến khi Khôi phục.
+5. Kiểm tra Store/Checkout/Community trong Steam sau khi tool mở lại Steam. Nếu nhật ký cho biết **DPI đang bật**, giữ tool mở; đóng tool dừng DPI. DNS/hosts vẫn giữ đến khi Khôi phục. Nếu web đạt nhưng Steam vẫn lỗi, dùng **Thử DPI tiếp** theo hướng dẫn bên trên.
 
 DNS IPv4 đổi trên Wi-Fi/Ethernet vật lý đang có default route tốt nhất; ảnh hưởng các ứng dụng sử dụng card đó. Tool không tự sửa adapter VPN hoặc tất cả card mạng. Không tìm thấy card phù hợp thì báo lỗi trước khi đổi DNS. Khi preset đã giống cấu hình đang có, tool bỏ qua lệnh đổi DNS.
 
@@ -40,15 +56,15 @@ DNS IPv4 đổi trên Wi-Fi/Ethernet vật lý đang có default route tốt nh�
 ## Luồng Apply
 
 1. Kiểm tra hosts hợp lệ, lưu trạng thái trước lần Apply. Nếu chọn đổi DNS, sao lưu DNS gốc trước lệnh đầu tiên: GUID, chế độ tự động/thủ công, danh sách DNS cũ. Dùng netsh **ipv4 dnsservers**, giữ nguyên IPv6/IP/gateway.
-2. Gỡ vùng hosts cũ của chính tool để thử DNS mới có ý nghĩa; xóa DNS cache; kiểm tra HTTPS Store, Community và Help.
+2. Gỡ vùng hosts cũ của chính tool để thử DNS mới có ý nghĩa; xóa DNS cache; kiểm tra HTTPS Store/cart, Checkout, Community và Help.
 3. Nếu chưa đạt, lấy IP IPv4 mới qua cả DoH Cloudflare và Google (tối đa 3 IP mỗi resolver), thử HTTPS trực tiếp với đúng hostname/SNI và chứng chỉ TLS. Sao lưu hosts nguyên byte trước khi cập nhật vùng riêng, rồi kiểm tra qua Windows lần nữa.
 4. Nếu vẫn chưa đạt và cho phép DPI, giải nén engine **GoodbyeDPI 0.2.2 x64** chính thức cùng DLL/driver WinDivert. Kiểm tra SHA-256 gói nhúng, bảo vệ quyền ghi thư mục executable nâng quyền, rồi thử tối đa sáu cấu hình trong `REPO-RESEARCH.md`. Nếu HTTPS chưa đạt, tìm lại IP kiểm chứng với DPI đang bật trước khi chuyển cấu hình.
 5. Mọi cấu hình dùng `--blacklist steam-domains.txt` chứa `steampowered.com`, `steamcommunity.com`, `steamstatic.com`. Mỗi cấu hình chờ khoảng 22 giây khởi tạo cộng thời gian thử mạng. Dừng cấu hình hiện tại trước khi thử tiếp.
-6. Nếu ba trang chính đạt, yêu cầu Steam thoát nhẹ rồi mở lại Store. Không ép tắt nếu Steam chưa chịu thoát. Nếu mọi cách được chọn thất bại, dừng DPI và cố trả DNS/hosts về trước lần Apply, bảo vệ sửa đổi đồng thời.
+6. Nếu các phép thử bắt buộc đạt, yêu cầu Steam thoát nhẹ rồi mở lại Store. Không ép tắt nếu Steam chưa chịu thoát. Nếu mọi cách được chọn thất bại, dừng DPI và cố trả DNS/hosts về trước lần Apply, bảo vệ sửa đổi đồng thời.
 
 DNS gốc được giữ qua nhiều lần Apply và qua việc đóng/mở tool, đến khi Khôi phục. Journal được ghi trước lệnh để hỗ trợ khôi phục nếu chương trình bị gián đoạn giữa hai lệnh đặt DNS. GUID giúp tránh nhầm adapter khi Windows đổi/recycle interface index.
 
-Login, Checkout và bốn CDN là mục bổ sung. Lỗi DNS của mục phụ được ghi rõ và bỏ qua. CDN gốc trả 403/404 chỉ chứng minh TLS có kết nối, không chứng minh mọi tài nguyên tải được. Trang chính cần HTTP 2xx/3xx.
+Checkout là mục bắt buộc. Login và bốn CDN là mục bổ sung khi chọn IP, nhưng chuyển hướng Checkout tới Login vẫn phải truy cập thành công. Lỗi DNS của mục phụ được ghi rõ và bỏ qua. CDN gốc trả 403/404 chỉ chứng minh TLS có kết nối, không chứng minh mọi tài nguyên tải được. Trang chính cần HTTP 2xx sau khi theo chuyển hướng HTTPS trong danh sách hostname Steam cho phép.
 
 ## Phạm vi
 
