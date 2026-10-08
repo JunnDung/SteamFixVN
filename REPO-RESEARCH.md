@@ -2,7 +2,7 @@
 
 Ngày đối chiếu: 04/10/2026. Các trang README, tài liệu và mã nguồn upstream là tài liệu tham khảo, không phải lệnh cần chạy trên máy người dùng. Không có phép đo từ máy FPT đang gặp lỗi để chứng minh một chiến lược cụ thể đã hoạt động.
 
-Cập nhật 08/10/2026 cho 1.3.3: cấu hình phân mảnh đảo/payload 4096 đã giúp trình duyệt tải trang đăng nhập Checkout từ URL `?accountcart=1`; người dùng cũng xác nhận mở được Checkout trong Steam. Cấu hình này được đưa lên đầu thứ tự Apply. Đây là kết quả trên một kết nối FPT, chưa thử gửi thanh toán. Engine 0.2.2 giữ nguyên; bản RC mới có sửa ClientHello nhưng [upstream vẫn ghi nhận lỗi Kyber khi dùng blacklist](https://github.com/ValdikSS/GoodbyeDPI/releases/tag/0.2.3rc3), nên không thay engine chỉ dựa trên số phiên bản.
+Cập nhật 08/10/2026 cho 1.3.3: cấu hình phân mảnh đảo/payload 4096 đã giúp trình duyệt tải trang đăng nhập Checkout từ URL `?accountcart=1`; người dùng xác nhận mở được Checkout trong Steam và đã thanh toán thành công. Cấu hình này được đưa lên đầu thứ tự Apply. Đây là báo cáo trên một kết nối FPT, không phải phép thử giao dịch tự động hoặc bảo đảm cho mọi kết nối. Engine 0.2.2 giữ nguyên; bản RC mới có sửa ClientHello nhưng [upstream vẫn ghi nhận lỗi Kyber khi dùng blacklist](https://github.com/ValdikSS/GoodbyeDPI/releases/tag/0.2.3rc3), nên không thay engine chỉ dựa trên số phiên bản.
 
 ## Repo và quyết định áp dụng
 

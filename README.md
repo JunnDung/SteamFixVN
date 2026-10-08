@@ -2,23 +2,23 @@
 
 ## Sửa lựa chọn DPI cho Checkout trên kết nối FPT đã kiểm tra
 
-Ngày 08/10/2026, ở cấu hình 1/6 của bản 1.3.2, phép thử hệ thống tới `https://checkout.steampowered.com/checkout/?accountcart=1` chuyển tới login thành công, nhưng trình duyệt vẫn báo `ERR_CONNECTION_RESET`. Sau khi chuyển tới cấu hình 3/6 **Phân mảnh đảo — payload lớn**, trình duyệt tải được trang đăng nhập của Checkout; người dùng xác nhận Checkout trong Steam cũng mở được. Đây là kết quả trên kết nối FPT này, không bảo đảm mọi đường mạng.
+Ngày 08/10/2026, ở cấu hình 1/6 của bản 1.3.2, phép thử hệ thống tới `https://checkout.steampowered.com/checkout/?accountcart=1` chuyển tới login thành công, nhưng trình duyệt vẫn báo `ERR_CONNECTION_RESET`. Sau khi chuyển tới cấu hình 3/6 **Phân mảnh đảo — payload lớn**, trình duyệt tải được trang đăng nhập của Checkout; người dùng xác nhận Checkout trong Steam mở được và đã thanh toán thành công. Đây là báo cáo trên kết nối FPT này, không bảo đảm mọi đường mạng.
 
 Bản 1.3.3 ưu tiên cấu hình đã giúp mở Checkout đó ở vị trí **1/6**, thay vì dừng ở phân mảnh thuận/payload 1200 chỉ đạt phép thử hệ thống. Check/Apply và chọn IP kiểm tra URL có `accountcart=1`. Engine vẫn là GoodbyeDPI 0.2.2 chính thức, phạm vi hostname Steam giữ nguyên. Không hạ bảo mật TLS hoặc sửa cookie/phiên đăng nhập.
 
 Nếu bản 1.3.2 đang mở Checkout được ở 3/6, có thể tiếp tục dùng và giữ tool mở. Khi chuyển bản: lưu game, đóng tool cũ, chạy `dist/1.3.3/SteamFixVN.exe`, bấm **Apply**, chấp nhận UAC và đợi Steam mở lại. Khi cần DPI, nhật ký sẽ bắt đầu ở **1/6 — Phân mảnh đảo — payload lớn**. Nếu web đạt nhưng Steam vẫn lỗi, **Thử DPI tiếp** ép thử từng cấu hình; cấu hình thất bại dừng engine và cố trả DNS/hosts về trước lần thử. Sau cấu hình 6 sẽ quay về 1.
 
-87 kiểm tra tự động đạt, gồm thứ tự cấu hình đã kiểm chứng, URL account-cart, chọn đúng cấu hình thủ công và rollback. Repo chứa mã nguồn 1.3.3; có thể tự build theo hướng dẫn bên dưới. Gói ZIP 1.3.3 hiện mới được tạo tại máy phát triển; GitHub release bên dưới vẫn là v1.3. Đã xác nhận mở Checkout trên kết nối báo lỗi; chưa thử gửi thanh toán hoặc mua hàng.
+87 kiểm tra tự động đạt, gồm thứ tự cấu hình đã kiểm chứng, URL account-cart, chọn đúng cấu hình thủ công và rollback. Repo chứa mã nguồn 1.3.3; có thể tự build theo hướng dẫn bên dưới. Release 1.3.3 gồm EXE, ZIP đầy đủ giấy phép/mã nguồn dependency và SHA-256. Báo cáo thanh toán thành công do người dùng cung cấp; phép thử tự động không đăng nhập hoặc tạo giao dịch.
 
 ## Sửa kiểm tra Checkout trong 1.3.1
 
-Bản 1.3.1 thêm Store `/cart/` và Checkout `/checkout/` vào các phép thử bắt buộc của Check/Apply và khi chọn IP DoH. Checkout lỗi không còn bị bỏ qua như mục phụ. 81 kiểm tra tự động đạt. Bản build mới nằm tại `dist/1.3.1/SteamFixVN.exe`; ZIP tại `releases/SteamFixVN-1.3.1.zip`. GitHub release liên kết bên dưới vẫn là bản 1.3.
+Bản 1.3.1 thêm Store `/cart/` và Checkout `/checkout/` vào các phép thử bắt buộc của Check/Apply và khi chọn IP DoH. Checkout lỗi không còn bị bỏ qua như mục phụ. 81 kiểm tra tự động đạt ở bản này; các thay đổi được giữ trong 1.3.3.
 
 Đóng cửa sổ tool cũ trước khi chạy bản mới, lưu game rồi Apply và chấp nhận UAC. Sau đó mở lại trang Checkout. Phép thử không đăng nhập, không tạo giao dịch; `/checkout/` chuyển tới login chỉ chứng minh đường kết nối đó hoạt động. Nếu vẫn -101/-105 trong phiên đăng nhập, gửi tên miền/đường dẫn lỗi đã bỏ token, mã giao dịch và dữ liệu thẻ. Chưa xác nhận sửa được giao dịch thực tế trên FPT.
 
-Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Chạy `dist/SteamFixVN.exe`, không cần cài .NET. Gói đầy đủ: `releases/SteamFixVN-1.3.zip`.
+Tool Windows 10/11 **64-bit**, giao diện tiếng Việt. Giải nén gói ZIP và chạy `SteamFixVN.exe`, không cần cài .NET.
 
-**[Tải bản v1.3 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.3)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
+**[Tải bản v1.3.3 trên GitHub Releases](https://github.com/JunnDung/SteamFixVN/releases/tag/v1.3.3)** — ưu tiên gói ZIP có hướng dẫn, giấy phép và SHA-256. Giải nén và chạy `SteamFixVN.exe`.
 
 ## Bản 1.3: áp dụng nghiên cứu DNS/DPI
 
